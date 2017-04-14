@@ -61,6 +61,9 @@ from .taskusertest import \
 from .communication import \
     CommunicationHandler, \
     QuestionHandler
+from .api import \
+    APIGenerateOutput, \
+    APISumbitionDetails
 
 
 HANDLERS = [
@@ -106,6 +109,10 @@ HANDLERS = [
 
     (r"/communication", CommunicationHandler),
     (r"/question", QuestionHandler),
+
+    # API
+    (r"/api/task/([0-9]+)/testcase/([0-9]+)/run", APIGenerateOutput),
+    (r"/api/task/([0-9]+)/test/([0-9]+)/result", APISumbitionDetails),
 ]
 
 

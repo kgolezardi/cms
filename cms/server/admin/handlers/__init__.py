@@ -103,7 +103,13 @@ from .submission import \
 from .usertest import \
     UserTestHandler, \
     UserTestFileHandler
-
+from .api import \
+    APITaskTypesHandler, \
+    APIScoreTypesHandler, \
+    APILanguages, \
+    APIAddTask, \
+    APIModifyTask, \
+    APIAddTestcase
 
 HANDLERS = [
     (r"/", OverviewHandler),
@@ -216,6 +222,14 @@ HANDLERS = [
 
     (r"/user_test/([0-9]+)(?:/([0-9]+))?", UserTestHandler),
     (r"/user_test_file/([0-9]+)", UserTestFileHandler),
+
+    # API
+    (r"/api/tasktypes", APITaskTypesHandler),
+    (r"/api/scoretypes", APIScoreTypesHandler),
+    (r"/api/languages", APILanguages),
+    (r"/api/tasks/add", APIAddTask),
+    (r"/api/task/([0-9]+)/modify", APIModifyTask),
+    (r"/api/task/([0-9]+)/testcases/add", APIAddTestcase),
 ]
 
 
