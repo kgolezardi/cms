@@ -2,14 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Contest Management System - http://cms-dev.github.io/
-# Copyright © 2010-2013 Giovanni Mascellani <mascellani@poisson.phc.unipi.it>
-# Copyright © 2010-2017 Stefano Maggiolo <s.maggiolo@gmail.com>
-# Copyright © 2010-2012 Matteo Boscariol <boscarim@hotmail.com>
-# Copyright © 2012-2014 Luca Wehrstedt <luca.wehrstedt@gmail.com>
-# Copyright © 2014 Artem Iglikov <artem.iglikov@gmail.com>
-# Copyright © 2014 Fabian Gundlach <320pointsguy@gmail.com>
-# Copyright © 2016 Myungwoo Chun <mc.tamaki@gmail.com>
-# TODO: add your name
+# Copyright © 2017 Kiarash Golezardi <kiarashgolezardi@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -24,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Handlers for the API related to AWS
+"""Handlers for the API
 
 """
 from __future__ import absolute_import
@@ -38,59 +31,226 @@ import pickle
 import re
 import json
 
-from urllib import quote
-
 import tornado.web
 
-from sqlalchemy import func
-
 from cms import config
-from cms.db import Task, UserTest, UserTestFile, UserTestManager, Testcase
-from cms.grading.languagemanager import get_language
+from cms.db import Attachment, Dataset, Session, Statement, Submission, \
+    SubmissionFormatElement, Task, UserTest, UserTestFile, \
+    UserTestManager, Testcase, Participation
 from cms.grading.tasktypes import get_task_type
-from cms.server import actual_phase_required, format_size
-from cmscommon.archive import Archive
-from cmscommon.crypto import encrypt_number
-from cmscommon.datetime import make_timestamp
-from cmscommon.mimetypes import get_type_for_file_name
+from cms.grading.languagemanager import get_language
+from cmscommon.datetime import make_datetime, make_timestamp
+from cms import plugin_list
+from cms.grading.languagemanager import LANGUAGES
 
-from .base import BaseHandler, FileHandler, \
-    NOTIFICATION_ERROR, NOTIFICATION_SUCCESS
+from .base import BaseHandler
 
 
 logger = logging.getLogger(__name__)
 
 
-class APIGenerateOutput(BaseHandler):
+class TestHandler(BaseHandler):
+
+    def get(self):
+        return self.write('Works')
+
+
+class TaskTypesHandler(BaseHandler):
+    """Writes a list of task types names
+
+    """
+
+    def get(self):
+        task_type_list = plugin_list("cms.grading.tasktypes", "tasktypes")
+        task_types_name = [task_type.__name__ for task_type in task_type_list]
+        return self.write(json.dumps(task_types_name))
+
+
+class ScoreTypesHandler(BaseHandler):
+    """Writes a list of task types names
+
+    """
+
+    def get(self):
+        score_type_list = plugin_list("cms.grading.scoretypes", "scoretypes")
+        score_types_name = [score_type.__name__ for score_type in score_type_list]
+        return self.write(json.dumps(score_types_name))
+
+
+class LanguagesHandler(BaseHandler):
+    """Writes a list of language names
+
+    """
+
+    def get(self):
+        language_names = [lang.name for lang in LANGUAGES]
+        return self.write(json.dumps(language_names))
+
+
+class AddTaskHandler(BaseHandler):
+    """Creates a new task.
+
+        Based on AWS AddTaskHandler
+    """
+
+    def post(self):
+        #
+        # TODO: helpers and managers
+        #
+        try:
+            attrs = dict()
+
+            self.get_string(attrs, "name", empty=None)
+            assert attrs.get("name") is not None, "No task name specified."
+            attrs["title"] = attrs["name"]
+
+            # Set default submission format as ["taskname.%l"]
+            attrs["submission_format"] = \
+                [SubmissionFormatElement("%s.%%l" % attrs["name"])]
+
+            # Create the task.
+            task = Task(**attrs)
+            self.sql_session.add(task)
+        except Exception as error:
+            raise tornado.web.HTTPError(403, "Invalid fields: %s" % error)
+
+        try:
+            attrs = dict()
+
+            # Create its first dataset.
+            attrs["description"] = "Default"
+            attrs["autojudge"] = True
+            self.get_time_limit(attrs, "time_limit")
+            self.get_memory_limit(attrs, "memory_limit")
+            self.get_task_type(attrs, "task_type", "task_type_parameters_")
+            self.get_score_type(attrs, "score_type", "score_type_parameters")
+            attrs["task"] = task
+            dataset = Dataset(**attrs)
+            self.sql_session.add(dataset)
+
+            # Make the dataset active. Life works better that way.
+            task.active_dataset = dataset
+
+        except Exception as error:
+            raise tornado.web.HTTPError(403, "Invalid fields: %s" % error)
+
+        if self.try_commit():
+            self.write('%d' % task.id)
+        else:
+            raise tornado.web.HTTPError(403, "Operation Unsuccessful!")
+
+
+class ModifyTaskHandler(BaseHandler):
+    """Updates an existing task.
+
+        Based on AWS TaskHandler
+    """
+
+    def post(self, task_id):
+        #
+        # TODO: helpers and managers
+        #
+        task = self.safe_get_item(Task, task_id)
+
+        try:
+            attrs = task.get_attrs()
+
+            self.get_string(attrs, "name", empty=None)
+            assert attrs.get("name") is not None, "No task name specified."
+            attrs["title"] = attrs["name"]
+
+            # Set default submission format as ["taskname.%l"]
+            attrs["submission_format"] = \
+                [SubmissionFormatElement("%s.%%l" % attrs["name"])]
+
+            # Update the task.
+            task.set_attrs(attrs)
+
+        except Exception as error:
+            raise tornado.web.HTTPError(403, "Invalid fields: %s" % error)
+
+        try:
+            dataset = task.active_dataset
+            attrs = dataset.get_attrs()
+
+            # Create its first dataset.
+            self.get_time_limit(attrs, "time_limit")
+            self.get_memory_limit(attrs, "memory_limit")
+            self.get_task_type(attrs, "task_type", "task_type_parameters_")
+            self.get_score_type(attrs, "score_type", "score_type_parameters")
+
+            # Update the dataset.
+            dataset.set_attrs(attrs)
+
+        except Exception as error:
+            raise tornado.web.HTTPError(403, "Invalid fields: %s" % error)
+
+        if self.try_commit():
+            # Update the task and score on RWS.
+            self.application.service.proxy_service.dataset_updated(
+                task_id=task.id)
+            self.write('%d' % task.id)
+        else:
+            raise tornado.web.HTTPError(403, "Operation Unsuccessful!")
+
+
+class AddTestcaseHandler(BaseHandler):
+    """Add a testcase to the task's active dataset.
+
+        Based on AWS AddTestcaseHandler
+    """
+
+    def post(self, task_id):
+        task = self.safe_get_item(Task, task_id)
+        dataset = task.active_dataset
+
+        codename = self.get_argument("testcase_id")
+
+        try:
+            input_ = self.request.files["input"][0]
+            output = self.request.files["output"][0]
+        except KeyError:
+            raise tornado.web.HTTPError(403, "Invalid data: Please fill both input and output.")
+
+        public = True
+        task_name = task.name
+        self.sql_session.close()
+
+        try:
+            input_digest = \
+                self.application.service.file_cacher.put_file_content(
+                    input_["body"],
+                    "Testcase input for task %s" % task_name)
+            output_digest = \
+                self.application.service.file_cacher.put_file_content(
+                    output["body"],
+                    "Testcase output for task %s" % task_name)
+        except Exception as error:
+            raise tornado.web.HTTPError(403, "Testcase storage failed: %s" % error)
+
+        self.sql_session = Session()
+
+        testcase = Testcase(
+            codename, public, input_digest, output_digest, dataset=dataset)
+        self.sql_session.add(testcase)
+
+        if self.try_commit():
+            # max_score and/or extra_headers might have changed.
+            self.application.service.proxy_service.reinitialize()
+            self.write('%d' % testcase.id)
+        else:
+            raise tornado.web.HTTPError(403, "Operation Unsuccessful!")
+
+
+class GenerateOutputHandler(BaseHandler):
     """Creates a user test on a task for a perticular testcase
 
-        Based on UserTestHandler
+        Based on CWS UserTestHandler
     """
-    def safe_get_item(self, cls, ident, session=None):
-        """Get item from database of class cls and id ident, using
-        session if given, or self.sql_session if not given. If id is
-        not found, raise a 404.
 
-        cls (type): class of object to retrieve.
-        ident (string): id of object.
-        session (Session|None): session to use.
-
-        return (object): the object with the given id.
-
-        raise (HTTPError): 404 if not found.
-
-        """
-        if session is None:
-            session = self.sql_session
-        entity = cls.get_from_id(ident, session)
-        if entity is None:
-            raise tornado.web.HTTPError(404)
-        return entity
-
-    @tornado.web.authenticated
-    @actual_phase_required(0)
     def post(self, task_id, testcase_id):
-        participation = self.current_user
+        participation = self.current_user  # TODO: create the contest, user, and participation
+        participation = self.sql_session.query(Participation).first()
 
         task = self.safe_get_item(Task, task_id)
         testcase = self.safe_get_item(Testcase, testcase_id)
@@ -103,15 +263,13 @@ class APIGenerateOutput(BaseHandler):
         if not task_type.testable:
             raise tornado.web.HTTPError(403, "This task type is not testable")
 
-        # Alias for easy access
-        contest = self.contest
-
         # Required files from the user.
         required = set([sfe.filename for sfe in task.submission_format] +
                        task_type.get_user_managers(task.submission_format) +
                        ["input"])
 
         # TODO: Archive??
+        # TODO: multipe solution files
 
         # Ensure that the user did not submit multiple files with the
         # same name.
@@ -145,10 +303,7 @@ class APIGenerateOutput(BaseHandler):
         if need_lang:
             error = None
             if submission_lang is None:
-                error = self._("Cannot recognize the user test language.")
-            elif submission_lang not in contest.languages:
-                error = self._("Language %s not allowed in this contest.") \
-                        % submission_lang
+                error = "Cannot recognize the user test language."
             if error is not None:
                 raise tornado.web.HTTPError(403, "%s" % error)
 
@@ -163,12 +318,13 @@ class APIGenerateOutput(BaseHandler):
 
         # Attempt to store the submission locally to be able to
         # recover a failure.
+
         if config.tests_local_copy:
             try:
                 path = os.path.join(
                     config.tests_local_copy_path.replace("%s",
                                                          config.data_dir),
-                    participation.user.username)
+                    'API')
                 if not os.path.exists(path):
                     os.makedirs(path)
                 # Pickle in ASCII format produces str, not unicode,
@@ -177,8 +333,8 @@ class APIGenerateOutput(BaseHandler):
                         os.path.join(path,
                                      "%d" % make_timestamp(self.timestamp)),
                         "wb") as file_:
-                    pickle.dump((self.contest.id,
-                                 participation.user.id,
+                    pickle.dump((None,
+                                 None,
                                  task.id,
                                  files), file_)
             except Exception as error:
@@ -190,9 +346,8 @@ class APIGenerateOutput(BaseHandler):
             for filename in files:
                 digest = self.application.service.file_cacher.put_file_content(
                     files[filename][1],
-                    "Test file %s sent by %s at %d." % (
-                        filename, participation.user.username,
-                        make_timestamp(self.timestamp)))
+                    "Test file %s sent by API at %d." % (
+                        filename, make_timestamp(self.timestamp)))
                 file_digests[filename] = digest
 
             # Now Adding managers' digests
@@ -208,8 +363,7 @@ class APIGenerateOutput(BaseHandler):
             raise tornado.web.HTTPError(403, "Test storage failed!")
 
         # All the files are stored, ready to submit!
-        logger.info("All files stored for test sent by %s",
-                    participation.user.username)
+        logger.info("All files stored for test sent by API")
         user_test = UserTest(self.timestamp,
                              submission_lang,
                              file_digests["input"],
@@ -229,7 +383,11 @@ class APIGenerateOutput(BaseHandler):
                 UserTestManager(filename, digest, user_test=user_test))
 
         self.sql_session.add(user_test)
-        self.sql_session.commit()
+        try:
+            self.sql_session.commit()
+        except Exception as error:
+            self.write('error: %s' % error)
+            return
         self.application.service.evaluation_service.new_user_test(
             user_test_id=user_test.id)
         # The argument (encripted user test id) is not used by CWS
@@ -238,54 +396,22 @@ class APIGenerateOutput(BaseHandler):
         self.write('%d' % user_test.id)
 
 
-class APISumbitionDetails(BaseHandler):
-    """Gets the result of the sumbission
+class SubmissionDetailsHandler(BaseHandler):
+    """Gets the result of the submission
 
-        Based on UserTestDetailsHandler
+        Based on CWS UserTestDetailsHandler
     """
-    def safe_get_item(self, cls, ident, session=None):
-        """Get item from database of class cls and id ident, using
-        session if given, or self.sql_session if not given. If id is
-        not found, raise a 404.
 
-        cls (type): class of object to retrieve.
-        ident (string): id of object.
-        session (Session|None): session to use.
-
-        return (object): the object with the given id.
-
-        raise (HTTPError): 404 if not found.
-
-        """
-        if session is None:
-            session = self.sql_session
-        entity = cls.get_from_id(ident, session)
-        if entity is None:
-            raise tornado.web.HTTPError(404)
-        return entity
-
-    @tornado.web.authenticated
-    @actual_phase_required(0)
     def get(self, task_id, user_test_num):
-        participation = self.current_user
-
-        if not self.r_params["testing_enabled"]:
-            raise tornado.web.HTTPError(404)
-
         task = self.safe_get_item(Task, task_id)
+        user_test = self.safe_get_item(UserTest, user_test_num)
 
-        user_test = self.sql_session.query(UserTest) \
-            .filter(UserTest.participation == participation) \
-            .filter(UserTest.task == task) \
-            .order_by(UserTest.timestamp) \
-            .offset(int(user_test_num) - 1) \
-            .first()
         if user_test is None:
-            raise tornado.web.HTTPError(404)
+            raise tornado.web.HTTPError(405)
 
         tr = user_test.get_result(task.active_dataset)
         if tr is None:
-            raise tornado.web.HTTPError(404)
+            raise tornado.web.HTTPError(403)
 
         result = {}
 
