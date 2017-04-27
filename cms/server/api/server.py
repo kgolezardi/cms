@@ -67,7 +67,7 @@ class APIWebServer(WebService):
             shard=shard,
             listen_address=config.api_listen_address)
 
-        self.contest = contest
+        self.contest = None
 
         self.file_cacher = FileCacher(self)
         self.evaluation_service = self.connect_to(
