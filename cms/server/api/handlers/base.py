@@ -486,3 +486,9 @@ class BaseHandler(CommonRequestHandler):
         if self.r_params is None:
             self.r_params = self.render_params()
         self.r_params["submission_count"] = count
+
+    def get_task_by_name(self, task_name):
+        task = self.sql_session.query(Task) \
+            .filter(Task.name == task_name) \
+            .first()
+        return task

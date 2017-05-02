@@ -51,8 +51,12 @@ logger = logging.getLogger(__name__)
 
 class TestHandler(BaseHandler):
 
-    def get(self):
-        return self.write('Works')
+    def get(self, task_name):
+        task = self.sql_session.query(Task)\
+            .filter(Task.name == task_name)\
+            .first()
+        a = task.active_dataset.time_limit
+        return self.write('%f' % a)
 
 
 class TaskTypesHandler(BaseHandler):
@@ -148,7 +152,7 @@ class ModifyTaskHandler(BaseHandler):
 
     def post(self, task_id):
         #
-        # TODO: helpers and managers
+        # TODO: delete instead of modify
         #
         task = self.safe_get_item(Task, task_id)
 
@@ -200,8 +204,8 @@ class AddTestcaseHandler(BaseHandler):
         Based on AWS AddTestcaseHandler
     """
 
-    def post(self, task_id):
-        task = self.safe_get_item(Task, task_id)
+    def post(self, task_name):
+        task = self.get_task_by_name(task_name)
         dataset = task.active_dataset
 
         codename = self.get_argument("testcase_id")
@@ -248,11 +252,11 @@ class GenerateOutputHandler(BaseHandler):
         Based on CWS UserTestHandler
     """
 
-    def post(self, task_id, testcase_id):
+    def post(self, task_name, testcase_id):
         participation = self.current_user  # TODO: create the contest, user, and participation
         participation = self.sql_session.query(Participation).first()
 
-        task = self.safe_get_item(Task, task_id)
+        task = self.get_task_by_name(task_name)
         testcase = self.safe_get_item(Testcase, testcase_id)
 
         input_digest = testcase.input
@@ -402,8 +406,8 @@ class SubmissionDetailsHandler(BaseHandler):
         Based on CWS UserTestDetailsHandler
     """
 
-    def get(self, task_id, user_test_num):
-        task = self.safe_get_item(Task, task_id)
+    def get(self, task_name, user_test_num):
+        task = self.get_task_by_name(task_name)
         user_test = self.safe_get_item(UserTest, user_test_num)
 
         if user_test is None:

@@ -33,17 +33,17 @@ from .handler import \
     SubmissionDetailsHandler
 
 HANDLERS = [
-    (r"/", TestHandler),
-    (r"/tasktypes", TaskTypesHandler),
+    (r"/test/(.*)", TestHandler),
+    (r"/tasktypes/", TaskTypesHandler),
     (r"/scoretypes", ScoreTypesHandler),
     (r"/languages", LanguagesHandler),
     (r"/tasks/add", AddTaskHandler),
 
-    (r"/task/([0-9]+)/modify", ModifyTaskHandler),
-    (r"/task/([0-9]+)/testcases/add", AddTestcaseHandler),
+    (r"/task/(.*)/delete", ModifyTaskHandler),
+    (r"/task/(.*)/testcases/add", AddTestcaseHandler),
 
-    (r"/task/([0-9]+)/testcase/([0-9]+)/run", GenerateOutputHandler),
-    (r"/task/([0-9]+)/test/([0-9]+)/result", SubmissionDetailsHandler),
+    (r"/task/(.*)/testcase/([0-9]+)/run", GenerateOutputHandler),
+    (r"/task/(.*)/test/([0-9]+)/result", SubmissionDetailsHandler),
 ]
 
 
