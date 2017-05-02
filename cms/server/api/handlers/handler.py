@@ -30,6 +30,7 @@ import os
 import pickle
 import re
 import json
+import base64
 
 import tornado.web
 
@@ -56,8 +57,9 @@ class TestHandler(BaseHandler):
         self.render("test.html", **self.r_params)
 
     def post(self):
-        input_file = self.request.files["salam"][0]
-        self.write('%s' % input_file)
+        input_body = self.request.files["input"][0]["body"]
+        encoded = base64.b64encode(input_body)
+        self.write('%s' % encoded)
 
 
 class TaskTypesHandler(BaseHandler):
@@ -172,10 +174,13 @@ class AddTestcaseHandler(BaseHandler):
         codename = self.get_argument("testcase_id")
 
         try:
-            input_ = self.request.files["input"][0]
-            output = self.request.files["output"][0]
-        except KeyError:
-            raise tornado.web.HTTPError(403, "Invalid data: Please fill both input and output.")
+            input_base64 = str(self.get_argument("input"))
+            input_body = str(base64.b64decode(input_base64))
+
+        except TypeError:
+            raise tornado.web.HTTPError(403, "Invalid data: Please give a valid input")
+
+        output_body = str()
 
         public = True
         task_name = task.name
@@ -184,11 +189,11 @@ class AddTestcaseHandler(BaseHandler):
         try:
             input_digest = \
                 self.application.service.file_cacher.put_file_content(
-                    input_["body"],
+                    input_body,
                     "Testcase input for task %s" % task_name)
             output_digest = \
                 self.application.service.file_cacher.put_file_content(
-                    output["body"],
+                    output_body,
                     "Testcase output for task %s" % task_name)
         except Exception as error:
             raise tornado.web.HTTPError(403, "Testcase storage failed: %s" % error)
@@ -201,7 +206,6 @@ class AddTestcaseHandler(BaseHandler):
 
         if self.try_commit():
             # max_score and/or extra_headers might have changed.
-            self.application.service.proxy_service.reinitialize()
             self.write('%d' % testcase.id)
         else:
             raise tornado.web.HTTPError(403, "Operation Unsuccessful!")
@@ -214,14 +218,18 @@ class GenerateOutputHandler(BaseHandler):
     """
 
     def post(self, task_name, testcase_id):
-        participation = self.current_user  # TODO: create the contest, user, and participation
+        # TODO: Create a special contest, user, and participation instead of
+        # using the first one you see
         participation = self.sql_session.query(Participation).first()
 
         task = self.get_task_by_name(task_name)
         testcase = self.safe_get_item(Testcase, testcase_id)
 
+        request_files = json.loads(str(self.get_argument("files")))
+
         input_digest = testcase.input
-        managers_names = [manager.filename for manager in task.active_dataset.managers.values()]
+        managers_names = \
+            [manager.filename for manager in task.active_dataset.managers.values()]
 
         # Check that the task is testable
         task_type = get_task_type(dataset=task.active_dataset)
@@ -233,27 +241,24 @@ class GenerateOutputHandler(BaseHandler):
                        task_type.get_user_managers(task.submission_format) +
                        ["input"])
 
-        # TODO: Archive??
-        # TODO: multipe solution files
-
-        # Ensure that the user did not submit multiple files with the
-        # same name.
-        if any(len(filename) != 1 for filename in self.request.files.values()):
-            raise tornado.web.HTTPError(403, "Please select the correct files.")
+        # TODO: If it is necessary, we may have to extract archives
 
         # This ensure that the user sent one file for every name in
         # submission format and no more.
-        provided = set(list(self.request.files.keys()) + ["input"] + managers_names)
+        provided = set(list(request_files.keys()) + ["input"] + managers_names)
         if not (required == provided):
             raise tornado.web.HTTPError(403, "Please select the correct files.")
 
         # Add submitted files. After this, files is a dictionary indexed
         # by *our* filenames (something like "output01.txt" or
         # "taskname.%l", and whose value is a couple
-        # (user_assigned_filename, content).
-        files = {}
-        for uploaded, data in self.request.files.iteritems():
-            files[uploaded] = (data[0]["filename"], data[0]["body"])
+        # (our_filename, content)
+        try:
+            files = {}
+            for filename, body in request_files.iteritems():
+                files[filename] = (filename, base64.b64decode(body))
+        except TypeError:
+            raise tornado.web.HTTPError(403, "Invalid data: Please provide a base64 encoded file")
 
         # Read the submission language provided in the request; we
         # integrate it with the language fetched from the previous
@@ -355,9 +360,6 @@ class GenerateOutputHandler(BaseHandler):
             return
         self.application.service.evaluation_service.new_user_test(
             user_test_id=user_test.id)
-        # The argument (encripted user test id) is not used by CWS
-        # (nor it discloses information to the user), but it is useful
-        # for automatic testing to obtain the user test id).
         self.write('%d' % user_test.id)
 
 
@@ -372,11 +374,11 @@ class SubmissionDetailsHandler(BaseHandler):
         user_test = self.safe_get_item(UserTest, user_test_num)
 
         if user_test is None:
-            raise tornado.web.HTTPError(405)
+            raise tornado.web.HTTPError(403)
 
         tr = user_test.get_result(task.active_dataset)
         if tr is None:
-            raise tornado.web.HTTPError(403)
+            raise tornado.web.HTTPError(405)
 
         result = {}
 
@@ -429,3 +431,5 @@ class SubmissionOutputHandler(FileHandler):
         mimetype = 'text/plain'
 
         self.fetch(digest, mimetype, 'output')
+        # TODO: Probably best not send the file in this way, but to
+        # write the content, as a base64 encoded string.

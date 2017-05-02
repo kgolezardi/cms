@@ -5,9 +5,24 @@
 {% from cms import plugin_list, SCORE_MODE_MAX_TOKENED_LAST, SCORE_MODE_MAX %}
 
 <form method="post" action="../test" enctype="multipart/form-data" >
-    {% module xsrf_form_html() %}
-    <input type="file" name="salam"/>
+    <input type="file" name="input"/><br>
     <input type="submit" value="Sumbit" />
+</form>
+
+<br><br><br>
+
+<form method="post" action="../task/simple/testcases/add" >
+    Codename: <input type="text" name="testcase_id"/><br>
+    Input file: <input type="text" name="input" /><br>
+    <input type="submit" value="Sumbit" />
+</form>
+
+<br><br><br>
+
+<form method="post" action="../task/simple/testcase/28/run" >
+    Files: <input type="text" name="files" /> For example: '{'simple.%l': 'things'}' <br>
+    Language: <input type="text" name="language" /> For example: 'C++11 / g++' <br>
+    <input type="submit" value="Submit" />
 </form>
 
 {% end %}
