@@ -5,7 +5,11 @@
 {% from cms import plugin_list, SCORE_MODE_MAX_TOKENED_LAST, SCORE_MODE_MAX %}
 
 <form method="post" action="../test" enctype="multipart/form-data" >
-    <input type="file" name="input"/><br>
+    <input type="file" name="input"/>
+    <select name="operation" >
+        <option value="encode">Encode</option>
+        <option value="log">Log</option>
+    </select>
     <input type="submit" value="Sumbit" />
 </form>
 

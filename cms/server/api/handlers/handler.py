@@ -35,7 +35,7 @@ import base64
 import tornado.web
 
 from cms import config
-from cms.db import Attachment, Dataset, Session, Statement, Submission, \
+from cms.db import Attachment, Dataset, Session, Manager, Submission, \
     SubmissionFormatElement, Task, UserTest, UserTestFile, \
     UserTestManager, Testcase, Participation
 from cms.grading.tasktypes import get_task_type
@@ -57,9 +57,13 @@ class TestHandler(BaseHandler):
         self.render("test.html", **self.r_params)
 
     def post(self):
-        input_body = self.request.files["input"][0]["body"]
-        encoded = base64.b64encode(input_body)
-        self.write('%s' % encoded)
+        input_file = self.request.files["input"][0]
+        operation = self.get_argument("operation", "encode")
+        if operation == "encode":
+            encoded = base64.b64encode(input_file["body"])
+            self.write('%s' % encoded)
+        else:
+            self.write('%s' % input_file)
 
 
 class TaskTypesHandler(BaseHandler):
@@ -101,9 +105,6 @@ class AddTaskHandler(BaseHandler):
     """
 
     def post(self):
-        #
-        # TODO: helpers and managers
-        #
         try:
             attrs = dict()
 
@@ -139,6 +140,23 @@ class AddTaskHandler(BaseHandler):
         except Exception as error:
             raise tornado.web.HTTPError(403, "Invalid fields: %s" % error)
 
+        managers = json.loads(str(self.get_argument("managers")))
+        for filename in managers:
+            try:
+                body = base64.b64decode(managers[filename])
+            except TypeError:
+                raise tornado.web.HTTPError(403, "Invalid data: Please provide a base64 encoded file")
+
+            try:
+                digest = self.application.service.file_cacher.put_file_content(
+                    body,
+                    "Task manager for %s" % attrs["name"])
+            except Exception as error:
+                raise tornado.web.HTTPError(403, "Manager storage failed: %s" % error)
+
+            manager = Manager(filename, digest, dataset=dataset)
+            self.sql_session.add(manager)
+
         if self.try_commit():
             self.write('%d' % task.id)
         else:
@@ -151,7 +169,7 @@ class RemoveTaskHandler(BaseHandler):
         Based on AWS RemoveTaskHandler
     """
 
-    def post(self, task_name):
+    def get(self, task_name):
         task = self.get_task_by_name(task_name)
 
         self.sql_session.delete(task)
