@@ -27,23 +27,25 @@ from .handler import \
     ScoreTypesHandler, \
     LanguagesHandler, \
     AddTaskHandler, \
-    ModifyTaskHandler, \
+    RemoveTaskHandler, \
     AddTestcaseHandler, \
     GenerateOutputHandler, \
-    SubmissionDetailsHandler
+    SubmissionDetailsHandler, \
+    SubmissionOutputHandler
 
 HANDLERS = [
-    (r"/test/(.*)", TestHandler),
+    (r"/test", TestHandler),
     (r"/tasktypes/", TaskTypesHandler),
     (r"/scoretypes", ScoreTypesHandler),
     (r"/languages", LanguagesHandler),
     (r"/tasks/add", AddTaskHandler),
 
-    (r"/task/(.*)/delete", ModifyTaskHandler),
+    (r"/task/(.*)/delete", RemoveTaskHandler),
     (r"/task/(.*)/testcases/add", AddTestcaseHandler),
 
     (r"/task/(.*)/testcase/([0-9]+)/run", GenerateOutputHandler),
     (r"/task/(.*)/test/([0-9]+)/result", SubmissionDetailsHandler),
+    (r"/task/(.*)/test/([0-9]+)/output", SubmissionOutputHandler),
 ]
 
 

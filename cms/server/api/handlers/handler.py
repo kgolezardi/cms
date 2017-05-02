@@ -43,7 +43,7 @@ from cmscommon.datetime import make_datetime, make_timestamp
 from cms import plugin_list
 from cms.grading.languagemanager import LANGUAGES
 
-from .base import BaseHandler
+from .base import BaseHandler, FileHandler
 
 
 logger = logging.getLogger(__name__)
@@ -52,11 +52,19 @@ logger = logging.getLogger(__name__)
 class TestHandler(BaseHandler):
 
     def get(self, task_name):
-        task = self.sql_session.query(Task)\
-            .filter(Task.name == task_name)\
-            .first()
-        a = task.active_dataset.time_limit
-        return self.write('%f' % a)
+        html_code = """!DOCTYPE html
+<html>
+<head>
+<title>Test page</title>
+</head>
+<body>
+    <form method="post" action="../test">
+        <input name="input" type="file" />
+        <input type="submit" value="Sumbit" />
+    </form>
+</body>
+</html>"""
+        return self.write('%s' % html_code)
 
 
 class TaskTypesHandler(BaseHandler):
@@ -108,9 +116,7 @@ class AddTaskHandler(BaseHandler):
             assert attrs.get("name") is not None, "No task name specified."
             attrs["title"] = attrs["name"]
 
-            # Set default submission format as ["taskname.%l"]
-            attrs["submission_format"] = \
-                [SubmissionFormatElement("%s.%%l" % attrs["name"])]
+            self.get_submission_format(attrs)
 
             # Create the task.
             task = Task(**attrs)
@@ -144,58 +150,20 @@ class AddTaskHandler(BaseHandler):
             raise tornado.web.HTTPError(403, "Operation Unsuccessful!")
 
 
-class ModifyTaskHandler(BaseHandler):
+class RemoveTaskHandler(BaseHandler):
     """Updates an existing task.
 
-        Based on AWS TaskHandler
+        Based on AWS RemoveTaskHandler
     """
 
-    def post(self, task_id):
-        #
-        # TODO: delete instead of modify
-        #
-        task = self.safe_get_item(Task, task_id)
+    def post(self, task_name):
+        task = self.get_task_by_name(task_name)
 
-        try:
-            attrs = task.get_attrs()
-
-            self.get_string(attrs, "name", empty=None)
-            assert attrs.get("name") is not None, "No task name specified."
-            attrs["title"] = attrs["name"]
-
-            # Set default submission format as ["taskname.%l"]
-            attrs["submission_format"] = \
-                [SubmissionFormatElement("%s.%%l" % attrs["name"])]
-
-            # Update the task.
-            task.set_attrs(attrs)
-
-        except Exception as error:
-            raise tornado.web.HTTPError(403, "Invalid fields: %s" % error)
-
-        try:
-            dataset = task.active_dataset
-            attrs = dataset.get_attrs()
-
-            # Create its first dataset.
-            self.get_time_limit(attrs, "time_limit")
-            self.get_memory_limit(attrs, "memory_limit")
-            self.get_task_type(attrs, "task_type", "task_type_parameters_")
-            self.get_score_type(attrs, "score_type", "score_type_parameters")
-
-            # Update the dataset.
-            dataset.set_attrs(attrs)
-
-        except Exception as error:
-            raise tornado.web.HTTPError(403, "Invalid fields: %s" % error)
-
+        self.sql_session.delete(task)
         if self.try_commit():
-            # Update the task and score on RWS.
-            self.application.service.proxy_service.dataset_updated(
-                task_id=task.id)
-            self.write('%d' % task.id)
+            return self.write('Successful')
         else:
-            raise tornado.web.HTTPError(403, "Operation Unsuccessful!")
+            return self.write('Unsuccessful')
 
 
 class AddTestcaseHandler(BaseHandler):
@@ -444,3 +412,27 @@ class SubmissionDetailsHandler(BaseHandler):
             result['memory'] = tr.compilation_memory
 
         self.write(json.dumps(result))
+
+
+class SubmissionOutputHandler(FileHandler):
+    """Send back a submission output.
+
+        Based on CWS UserTestIOHandler
+    """
+    def get(self, task_name, test_id):
+        task = self.get_task_by_name(task_name)
+        user_test = self.safe_get_item(UserTest, test_id)
+
+        if user_test is None:
+            raise tornado.web.HTTPError(404)
+
+        tr = user_test.get_result(task.active_dataset)
+        digest = tr.output if tr is not None else None
+        self.sql_session.close()
+
+        if digest is None:
+            raise tornado.web.HTTPError(404)
+
+        mimetype = 'text/plain'
+
+        self.fetch(digest, mimetype, 'output')

@@ -10,6 +10,7 @@
 # Copyright © 2014 Fabian Gundlach <320pointsguy@gmail.com>
 # Copyright © 2016 Myungwoo Chun <mc.tamaki@gmail.com>
 # Copyright © 2016 Peyman Jabbarzade Ganje <peyman.jabarzade@gmail.com>
+# Copyright © 2017 Kiarash Golezardi <kiarashgolezardi@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -492,3 +493,6 @@ class BaseHandler(CommonRequestHandler):
             .filter(Task.name == task_name) \
             .first()
         return task
+
+
+FileHandler = file_handler_gen(BaseHandler)
