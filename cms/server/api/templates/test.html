@@ -1,0 +1,13 @@
+{% extends base.html %}
+
+{% block core %}
+{% from cms.server import format_dataset_attrs %}
+{% from cms import plugin_list, SCORE_MODE_MAX_TOKENED_LAST, SCORE_MODE_MAX %}
+
+<form method="post" action="../test" enctype="multipart/form-data" >
+    {% module xsrf_form_html() %}
+    <input type="file" name="salam"/>
+    <input type="submit" value="Sumbit" />
+</form>
+
+{% end %}

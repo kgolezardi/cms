@@ -51,20 +51,13 @@ logger = logging.getLogger(__name__)
 
 class TestHandler(BaseHandler):
 
-    def get(self, task_name):
-        html_code = """!DOCTYPE html
-<html>
-<head>
-<title>Test page</title>
-</head>
-<body>
-    <form method="post" action="../test">
-        <input name="input" type="file" />
-        <input type="submit" value="Sumbit" />
-    </form>
-</body>
-</html>"""
-        return self.write('%s' % html_code)
+    def get(self):
+        self.r_params = self.render_params()
+        self.render("test.html", **self.r_params)
+
+    def post(self):
+        input_file = self.request.files["salam"][0]
+        self.write('%s' % input_file)
 
 
 class TaskTypesHandler(BaseHandler):

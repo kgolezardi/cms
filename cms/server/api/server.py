@@ -52,7 +52,8 @@ class APIWebServer(WebService):
     def __init__(self, shard):
         parameters = {
             "login_url": "/",
-            "template_path": "",
+            "template_path": pkg_resources.resource_filename(
+                "cms.server.api", "templates"),
             "static_files": [],
             "cookie_secret": base64.b64encode(config.secret_key),
             "debug": config.tornado_debug,
