@@ -246,8 +246,6 @@ class GenerateOutputHandler(BaseHandler):
         request_files = json.loads(str(self.get_argument("files")))
 
         input_digest = testcase.input
-        managers_names = \
-            [manager.filename for manager in task.active_dataset.managers.values()]
 
         # Check that the task is testable
         task_type = get_task_type(dataset=task.active_dataset)
@@ -263,7 +261,7 @@ class GenerateOutputHandler(BaseHandler):
 
         # This ensure that the user sent one file for every name in
         # submission format and no more.
-        provided = set(list(request_files.keys()) + ["input"] + managers_names)
+        provided = set(list(request_files.keys()) + ["input"])
         if not (required == provided):
             raise tornado.web.HTTPError(403, "Please select the correct files.")
 
