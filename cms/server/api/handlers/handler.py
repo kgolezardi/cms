@@ -335,11 +335,7 @@ class GenerateOutputHandler(BaseHandler):
                         filename, make_timestamp(self.timestamp)))
                 file_digests[filename] = digest
 
-            # Now Adding managers' digests
-            for manager in task.active_dataset.managers.values():
-                file_digests[manager.filename] = manager.digest
-
-            # Finally Adding testcase's digest
+            # Adding testcase's digest
             file_digests["input"] = input_digest
 
         # In case of error, the server aborts the submission
