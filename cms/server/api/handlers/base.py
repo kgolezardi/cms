@@ -494,5 +494,9 @@ class BaseHandler(CommonRequestHandler):
             .first()
         return task
 
+    def APIOutput(self, status, message):
+        res = {"status": status, "message": message}
+        self.write(json.dumps(res))
+
 
 FileHandler = file_handler_gen(BaseHandler)

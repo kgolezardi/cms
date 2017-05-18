@@ -118,7 +118,7 @@ class AddTaskHandler(BaseHandler):
             task = Task(**attrs)
             self.sql_session.add(task)
         except Exception as error:
-            raise tornado.web.HTTPError(403, "Invalid fields: %s" % error)
+            return self.APIOutput(False, "Invalid fields: %s" % error)
 
         try:
             attrs = dict()
@@ -138,29 +138,29 @@ class AddTaskHandler(BaseHandler):
             task.active_dataset = dataset
 
         except Exception as error:
-            raise tornado.web.HTTPError(403, "Invalid fields: %s" % error)
+            return self.APIOutput(False, "Invalid fields: %s" % error)
 
         managers = json.loads(str(self.get_argument("managers")))
         for filename in managers:
             try:
                 body = base64.b64decode(managers[filename])
             except TypeError:
-                raise tornado.web.HTTPError(403, "Invalid data: Please provide a base64 encoded file")
+                return self.APIOutput(False, "Invalid data: Please provide a base64 encoded file")
 
             try:
                 digest = self.application.service.file_cacher.put_file_content(
                     body,
                     "Task manager for %s" % attrs["name"])
             except Exception as error:
-                raise tornado.web.HTTPError(403, "Manager storage failed: %s" % error)
+                return self.APIOutput(False, "Manager storage failed: %s" % error)
 
             manager = Manager(filename, digest, dataset=dataset)
             self.sql_session.add(manager)
 
         if self.try_commit():
-            self.write('%d' % task.id)
+            return self.APIOutput(True, '%d' % task.id)
         else:
-            raise tornado.web.HTTPError(403, "Operation Unsuccessful!")
+            return self.APIOutput(False, "Operation Unsuccessful!")
 
 
 class RemoveTaskHandler(BaseHandler):
@@ -174,9 +174,9 @@ class RemoveTaskHandler(BaseHandler):
 
         self.sql_session.delete(task)
         if self.try_commit():
-            return self.write('Successful')
+            return self.APIOutput(True, 'Successful')
         else:
-            return self.write('Unsuccessful')
+            return self.APIOutput(False, 'Unsuccessful')
 
 
 class AddTestcaseHandler(BaseHandler):
@@ -194,11 +194,11 @@ class AddTestcaseHandler(BaseHandler):
         try:
             input_base64 = str(self.get_argument("input"))
             input_body = str(base64.b64decode(input_base64))
+            output_base64 = str(self.get_argument("output"))
+            output_body = str(base64.b64decode(output_base64))
 
         except TypeError:
-            raise tornado.web.HTTPError(403, "Invalid data: Please give a valid input")
-
-        output_body = str()
+            return self.APIOutput(False, "Invalid data: Please give a valid input")
 
         public = True
         task_name = task.name
@@ -214,7 +214,7 @@ class AddTestcaseHandler(BaseHandler):
                     output_body,
                     "Testcase output for task %s" % task_name)
         except Exception as error:
-            raise tornado.web.HTTPError(403, "Testcase storage failed: %s" % error)
+            return self.APIOutput(False, "Testcase storage failed: %s" % error)
 
         self.sql_session = Session()
 
@@ -223,10 +223,9 @@ class AddTestcaseHandler(BaseHandler):
         self.sql_session.add(testcase)
 
         if self.try_commit():
-            # max_score and/or extra_headers might have changed.
-            self.write('%d' % testcase.id)
+            return self.APIOutput(True, '%d' % testcase.id)
         else:
-            raise tornado.web.HTTPError(403, "Operation Unsuccessful!")
+            return self.APIOutput(False, "Operation Unsuccessful!")
 
 
 class GenerateOutputHandler(BaseHandler):
@@ -250,7 +249,7 @@ class GenerateOutputHandler(BaseHandler):
         # Check that the task is testable
         task_type = get_task_type(dataset=task.active_dataset)
         if not task_type.testable:
-            raise tornado.web.HTTPError(403, "This task type is not testable")
+            return self.APIOutput(False, "This task type is not testable")
 
         # Required files from the user.
         required = set([sfe.filename for sfe in task.submission_format] +
@@ -263,7 +262,7 @@ class GenerateOutputHandler(BaseHandler):
         # submission format and no more.
         provided = set(list(request_files.keys()) + ["input"])
         if not (required == provided):
-            raise tornado.web.HTTPError(403, "Please select the correct files.")
+            return self.APIOutput(False, "Please send the correct files.")
 
         # Add submitted files. After this, files is a dictionary indexed
         # by *our* filenames (something like "output01.txt" or
@@ -274,7 +273,7 @@ class GenerateOutputHandler(BaseHandler):
             for filename, body in request_files.iteritems():
                 files[filename] = (filename, base64.b64decode(body))
         except TypeError:
-            raise tornado.web.HTTPError(403, "Invalid data: Please provide a base64 encoded file")
+            return self.APIOutput(False, "Invalid data: Please provide a base64 encoded file")
 
         # Read the submission language provided in the request; we
         # integrate it with the language fetched from the previous
@@ -291,14 +290,14 @@ class GenerateOutputHandler(BaseHandler):
             if submission_lang is None:
                 error = "Cannot recognize the user test language."
             if error is not None:
-                raise tornado.web.HTTPError(403, "%s" % error)
+                return self.APIOutput(False, "%s" % error)
 
         # Check if submitted files are small enough.
         if any([len(f[1]) > config.max_submission_length
                 for n, f in files.items() if n != "input"]):
-            raise tornado.web.HTTPError(403,
-                                        "Each source file must be at most %d bytes long."
-                                        % config.max_submission_length)
+            return self.APIOutput(False,
+                                  "Each source file must be at most %d bytes long."
+                                   % config.max_submission_length)
 
         # All checks done, submission accepted.
 
@@ -346,7 +345,7 @@ class GenerateOutputHandler(BaseHandler):
         # In case of error, the server aborts the submission
         except Exception as error:
             logger.error("Storage failed! %s", error)
-            raise tornado.web.HTTPError(403, "Test storage failed!")
+            return self.APIOutput(False, "Test storage failed!")
 
         # All the files are stored, ready to submit!
         logger.info("All files stored for test sent by API")
@@ -372,11 +371,10 @@ class GenerateOutputHandler(BaseHandler):
         try:
             self.sql_session.commit()
         except Exception as error:
-            self.write('error: %s' % error)
-            return
+            return self.APIOutput(False, '%s' % error)
         self.application.service.evaluation_service.new_user_test(
             user_test_id=user_test.id)
-        self.write('%d' % user_test.id)
+        return self.APIOutput(True, '%d' % user_test.id)
 
 
 class SubmissionDetailsHandler(BaseHandler):
@@ -390,11 +388,11 @@ class SubmissionDetailsHandler(BaseHandler):
         user_test = self.safe_get_item(UserTest, user_test_num)
 
         if user_test is None:
-            raise tornado.web.HTTPError(403)
+            return self.APIOutput(False, '')
 
         tr = user_test.get_result(task.active_dataset)
         if tr is None:
-            raise tornado.web.HTTPError(405)
+            return self.APIOutput(False, '')
 
         result = {}
 
@@ -402,15 +400,13 @@ class SubmissionDetailsHandler(BaseHandler):
             result['evalres'] = tr.evaluation_text
         else:
             result['evalres'] = 'none'
-            self.write(json.dumps(result))
-            return
+            return self.APIOutput(True, json.dumps(result))
 
         if tr is not None and tr.compiled():
             result['compiled'] = tr.compilation_text
         else:
             result['compiled'] = 'none'
-            self.write(json.dumps(result))
-            return
+            return self.APIOutput(True, json.dumps(result))
 
         if tr.compilation_time is None:
             result['time'] = 'none'
@@ -422,7 +418,7 @@ class SubmissionDetailsHandler(BaseHandler):
         else:
             result['memory'] = tr.compilation_memory
 
-        self.write(json.dumps(result))
+        return self.APIOutput(True, json.dumps(result))
 
 
 class SubmissionOutputHandler(FileHandler):
