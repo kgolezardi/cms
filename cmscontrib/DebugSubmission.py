@@ -75,6 +75,12 @@ def debugSubmission(submission_id, dataset_id, testcase_codename):
         for sandbox_path in comp_job.sandboxes:
             print("Compilation sandbox created in %s" % sandbox_path)
 
+        # Check if the compilation is successful
+        result = submission.get_result(dataset)
+        if result is None or result.compilation_failed():
+            print("Compilatoin Failed")
+            return True
+
         # Evaluation
         operation = ESOperation(ESOperation.EVALUATION, submission_id, dataset_id, testcase_codename)
         eval_job = EvaluationJob.from_submission(operation, submission, dataset)
