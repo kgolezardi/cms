@@ -111,8 +111,14 @@ class AddTaskHandler(BaseHandler):
             attrs = dict()
 
             self.get_string(attrs, "name", empty=None)
-            assert attrs.get("name") is not None, "No task name specified."
+            if attrs.get("name") is None:
+                self.APIOutput(False, "No task name specified.")
             attrs["title"] = attrs["name"]
+
+            # Check if the task already exists
+            task = self.get_task_by_name(attrs["name"])
+            if task is not None:
+                return self.APIOutput(False, 'A problem with this name already exists')
 
             self.get_submission_format(attrs)
 
