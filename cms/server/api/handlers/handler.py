@@ -31,6 +31,7 @@ import pickle
 import re
 import json
 import base64
+import gevent
 
 import tornado.web
 
@@ -38,6 +39,7 @@ from cms import config
 from cms.db import Attachment, Dataset, Session, Manager, Submission, \
     SubmissionFormatElement, Task, UserTest, UserTestFile, \
     UserTestManager, Testcase, Participation
+from cms.db.filecacher import FileCacher
 from cms.grading.tasktypes import get_task_type
 from cms.grading.languagemanager import get_language
 from cmscommon.datetime import make_datetime, make_timestamp
@@ -311,8 +313,8 @@ class GenerateOutputHandler(BaseHandler):
             try:
                 path = os.path.join(
                     config.tests_local_copy_path.replace("%s",
-                                                         config.data_dir),
-                    'API')
+                                                         config.data_dir)
+                    , 'API')
                 if not os.path.exists(path):
                     os.makedirs(path)
                 # Pickle in ASCII format produces str, not unicode,
@@ -408,7 +410,7 @@ class SubmissionDetailsHandler(BaseHandler):
         return self.APIOutput(True, json.dumps(result))
 
 
-class SubmissionOutputHandler(FileHandler):
+class SubmissionOutputHandler(BaseHandler):
     """Send back a submission output.
 
         Based on CWS UserTestIOHandler
@@ -418,17 +420,27 @@ class SubmissionOutputHandler(FileHandler):
         user_test = self.safe_get_item(UserTest, test_id)
 
         if user_test is None:
-            raise tornado.web.HTTPError(404)
+            return self.APIOutput(False, "No usertest with the given ID")
 
         tr = user_test.get_result(task.active_dataset)
         digest = tr.output if tr is not None else None
         self.sql_session.close()
 
         if digest is None:
-            raise tornado.web.HTTPError(404)
+            return self.APIOutput(False, "Digest is none")
 
-        mimetype = 'text/plain'
+        file = self.application.service.file_cacher.get_file(digest)
+        result = str()
 
-        self.fetch(digest, mimetype, 'output')
-        # TODO: Probably best not send the file in this way, but to
-        # write the content, as a base64 encoded string.
+        ret = True
+        while ret:
+            data = file.read(FileCacher.CHUNK_SIZE)
+            length = len(data)
+            result += data
+            if length < FileCacher.CHUNK_SIZE:
+                file.close()
+                ret = False
+
+            gevent.sleep(0)
+
+        return self.APIOutput(True, base64.b64encode(result))
