@@ -43,7 +43,7 @@ HANDLERS = [
     (r"/task/(.*)/delete", RemoveTaskHandler),
     (r"/task/(.*)/testcases/add", AddTestcaseHandler),
 
-    (r"/task/(.*)/testcase/([0-9]+)/run", GenerateOutputHandler),
+    (r"/task/(.*)/testcase/(.*)/run", GenerateOutputHandler),
     (r"/task/(.*)/test/([0-9]+)/result", SubmissionDetailsHandler),
     (r"/task/(.*)/test/([0-9]+)/output", SubmissionOutputHandler),
 ]

@@ -234,13 +234,15 @@ class GenerateOutputHandler(BaseHandler):
         Based on CWS UserTestHandler
     """
 
-    def post(self, task_name, testcase_id):
+    def post(self, task_name, testcase_codename):
         # TODO: Create a special contest, user, and participation instead of
         # using the first one you see
         participation = self.sql_session.query(Participation).first()
 
         task = self.get_task_by_name(task_name)
-        testcase = self.safe_get_item(Testcase, testcase_id)
+        testcase = self.sql_session.query(Testcase) \
+            .filter(Testcase.codename == testcase_codename) \
+            .first()
 
         request_files = json.loads(str(self.get_argument("files")))
 
@@ -256,11 +258,12 @@ class GenerateOutputHandler(BaseHandler):
                        task_type.get_user_managers(task.submission_format) +
                        ["input"])
 
-        # TODO: If it is necessary, we may have to extract archives
+        # TODO: If it is necessary, we may need to extract archives
 
         # This ensure that the user sent one file for every name in
         # submission format and no more.
-        provided = set(list(request_files.keys()) + ["input"])
+        provided = set(list(request_files.keys()) + ["input"]
+                       + task_type.get_user_managers(task.submission_format))
         if not (required == provided):
             return self.APIOutput(False, "Please send the correct files.")
 
@@ -381,7 +384,9 @@ class SubmissionDetailsHandler(BaseHandler):
 
     def get(self, task_name, user_test_num):
         task = self.get_task_by_name(task_name)
-        user_test = self.safe_get_item(UserTest, user_test_num)
+        user_test = self.sql_session.query(UserTest) \
+            .filter(UserTest.id == user_test_num) \
+            .first()
 
         if user_test is None:
             return self.APIOutput(False, '')
@@ -390,29 +395,15 @@ class SubmissionDetailsHandler(BaseHandler):
         if tr is None:
             return self.APIOutput(False, '')
 
-        result = {}
+        result = dict()
 
-        if tr is not None and tr.evaluated():
-            result['evalres'] = tr.evaluation_text
-        else:
-            result['evalres'] = 'none'
-            return self.APIOutput(True, json.dumps(result))
+        result['evalres'] = tr.evaluation_text
 
-        if tr is not None and tr.compiled():
-            result['compiled'] = tr.compilation_text
-        else:
-            result['compiled'] = 'none'
-            return self.APIOutput(True, json.dumps(result))
+        result['compiled'] = tr.compilation_text
 
-        if tr.compilation_time is None:
-            result['time'] = 'none'
-        else:
-            result['time'] = tr.compilation_time
+        result['time'] = tr.compilation_time
 
-        if tr.compilation_memory is None:
-            result['memory'] = 'none'
-        else:
-            result['memory'] = tr.compilation_memory
+        result['memory'] = tr.compilation_memory
 
         return self.APIOutput(True, json.dumps(result))
 

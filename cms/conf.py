@@ -112,7 +112,7 @@ class Config(object):
 
         # APIWebServer.
         self.api_listen_address = ""
-        self.api_listen_port = 8890
+        self.api_listen_port = 8897
 
         # ProxyService.
         self.rankings = ["http://usern4me:passw0rd@localhost:8890/"]
