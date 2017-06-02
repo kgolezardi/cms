@@ -173,10 +173,10 @@ class TestRunner(object):
         user_create_args = {
             "username": username,
             "password": "kamikaze",
+            "method": "plaintext",
             "first_name": "Ms. Test",
             "last_name": "Wabbit the %d%s" % (self.num_users,
-                                              enumerify(self.num_users)),
-            "multipart_post": True,
+                                              enumerify(self.num_users))
         }
         if username in users:
             self.user_id = users[username]['id']
