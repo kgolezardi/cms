@@ -29,6 +29,7 @@ from .handler import \
     AddTaskHandler, \
     RemoveTaskHandler, \
     AddTestcaseHandler, \
+    DeleteTestcaseHandler, \
     GenerateOutputHandler, \
     SubmissionDetailsHandler, \
     SubmissionOutputHandler
@@ -40,8 +41,9 @@ HANDLERS = [
     (r"/languages", LanguagesHandler),
     (r"/tasks/add", AddTaskHandler),
 
-    (r"/task/(.*)/delete", RemoveTaskHandler),
+    (r"/task/(.*)/remove", RemoveTaskHandler),
     (r"/task/(.*)/testcases/add", AddTestcaseHandler),
+    (r"/task/(.*)/testcase/(.*)/delete", DeleteTestcaseHandler),
 
     (r"/task/(.*)/testcase/(.*)/run", GenerateOutputHandler),
     (r"/task/(.*)/test/([0-9]+)/result", SubmissionDetailsHandler),

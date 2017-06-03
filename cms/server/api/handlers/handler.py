@@ -38,7 +38,7 @@ import tornado.web
 from cms import config
 from cms.db import Attachment, Dataset, Session, Manager, Submission, \
     SubmissionFormatElement, Task, UserTest, UserTestFile, \
-    UserTestManager, Testcase, Participation
+    UserTestManager, Testcase, Participation, Contest
 from cms.db.filecacher import FileCacher
 from cms.grading.tasktypes import get_task_type
 from cms.grading.languagemanager import get_language
@@ -128,6 +128,11 @@ class AddTaskHandler(BaseHandler):
         except Exception as error:
             return self.APIOutput(False, "Invalid fields: %s" % error)
 
+        # TODO: use another way to select the contest
+        contest = self.sql_session.query(Contest).first()
+        task.num = len(contest.tasks)
+        task.contest = contest
+
         try:
             attrs = dict()
 
@@ -179,8 +184,20 @@ class RemoveTaskHandler(BaseHandler):
 
     def get(self, task_name):
         task = self.get_task_by_name(task_name)
+        contest_id = task.contest_id
+        num = task.num
 
         self.sql_session.delete(task)
+
+        # Keeping the tasks' nums to the range 0... n - 1.
+        if contest_id is not None:
+            following_tasks = self.sql_session.query(Task) \
+                .filter(Task.contest_id == contest_id) \
+                .filter(Task.num > num) \
+                .all()
+            for task in following_tasks:
+                task.num -= 1
+
         if self.try_commit():
             return self.APIOutput(True, 'Successful')
         else:
@@ -199,10 +216,16 @@ class AddTestcaseHandler(BaseHandler):
 
         codename = self.get_argument("testcase_id")
 
+        testcase = self.sql_session.query(Testcase) \
+            .filter(Testcase.codename == codename) \
+            .first()
+        if testcase is not None:
+            return self.APIOutput(False, 'A testcase with this code already exists')
+
         try:
             input_base64 = str(self.get_argument("input"))
             input_body = str(base64.b64decode(input_base64))
-            output_base64 = str(self.get_argument("output"))
+            output_base64 = str(self.get_argument("output", ''))
             output_body = str(base64.b64decode(output_base64))
 
         except TypeError:
@@ -234,6 +257,30 @@ class AddTestcaseHandler(BaseHandler):
             return self.APIOutput(True, '%d' % testcase.id)
         else:
             return self.APIOutput(False, "Operation Unsuccessful!")
+
+
+class DeleteTestcaseHandler(BaseHandler):
+    """Deletes a testcase
+
+        Based on AWS DeleteTestcaseHandler
+    """
+
+    def get(self, task_name, codename):
+        testcase = self.sql_session.query(Testcase) \
+            .filter(Testcase.codename == codename) \
+            .first()
+        task = self.get_task_by_name(task_name)
+        dataset = task.active_dataset
+
+        # Protect against URLs providing incompatible parameters.
+        if dataset is not testcase.dataset:
+            return self.APIOutput(False, 'Invalid info')
+
+        self.sql_session.delete(testcase)
+        if self.try_commit():
+            self.APIOutput(True, 'Successful')
+        else:
+            self.APIOutput(False, 'Unsuccessful')
 
 
 class GenerateOutputHandler(BaseHandler):
@@ -387,7 +434,7 @@ class GenerateOutputHandler(BaseHandler):
 class SubmissionDetailsHandler(BaseHandler):
     """Gets the result of the submission
 
-        Based on CWS UserTestDetailsHandler
+        Based on CWS UserTestStatusHandler
     """
 
     def get(self, task_name, user_test_num):
@@ -397,11 +444,11 @@ class SubmissionDetailsHandler(BaseHandler):
             .first()
 
         if user_test is None:
-            return self.APIOutput(False, '')
+            return self.APIOutput(False, 'No usertest')
 
         tr = user_test.get_result(task.active_dataset)
         if tr is None:
-            return self.APIOutput(False, '')
+            return self.APIOutput(False, 'No result')
 
         result = dict()
 

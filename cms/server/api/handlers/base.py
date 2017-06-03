@@ -36,6 +36,7 @@ from __future__ import unicode_literals
 import json
 import logging
 import traceback
+import ipaddress
 
 from datetime import datetime, timedelta
 from functools import wraps
@@ -51,7 +52,7 @@ from cms.db import Admin, Contest, Participation, Question, \
     UserTest
 from cms.grading.scoretypes import get_score_type_class
 from cms.grading.tasktypes import get_task_type_class
-from cms.server import CommonRequestHandler, file_handler_gen, get_url_root
+from cms.server import CommonRequestHandler, file_handler_gen
 from cmscommon.datetime import make_datetime
 
 
@@ -121,19 +122,26 @@ def parse_datetime(value):
         raise ValueError("Can't cast %s to datetime." % value)
 
 
-def parse_ip_address_or_subnet(ip_list):
-    """Validate a comma-separated list of IP addresses or subnets."""
-    for value in ip_list.split(","):
-        address, sep, subnet = value.partition("/")
-        if sep != "":
-            subnet = int(subnet)
-            assert 0 <= subnet < 32
-        fields = address.split(".")
-        assert len(fields) == 4
-        for field in fields:
-            num = int(field)
-            assert 0 <= num < 256
-    return ip_list
+def parse_ip_networks(networks):
+    """Parse and validate a comma-separated list of IP networks.
+
+    networks (unicode): a comma-separated list of IP networks, which
+        are IP addresses (both in v4 and v6 formats) with, possibly, a
+        subnet mask specified as a "/<int>" suffix (in that case all
+        unmasked bits of the address have to be zeros).
+
+    return ([ipaddress.IPv4Network|ipaddress.IPv6Network]): the parsed
+        and normalized networks converted to an appropriate type.
+
+    """
+    result = list()
+    for network in networks.split(","):
+        network = network.strip()
+        try:
+            result.append(ipaddress.ip_network(network))
+        except ValueError:
+            raise ValueError("Can't cast %s to an IP network." % network)
+    return result
 
 
 class BaseHandler(CommonRequestHandler):
@@ -202,7 +210,7 @@ class BaseHandler(CommonRequestHandler):
                                 else "v" + __version__[:3]
         params["timestamp"] = make_datetime()
         params["contest"] = self.contest
-        params["url_root"] = get_url_root(self.request.path)
+        params["url"] = self.url
         if self.current_user is not None:
             params["current_user"] = self.current_user
         if self.contest is not None:
@@ -287,7 +295,7 @@ class BaseHandler(CommonRequestHandler):
 
     get_datetime = argument_reader(parse_datetime)
 
-    get_ip_address_or_subnet = argument_reader(parse_ip_address_or_subnet)
+    get_ip_networks = argument_reader(parse_ip_networks)
 
     def get_submission_format(self, dest):
         """Parse the submission format.
