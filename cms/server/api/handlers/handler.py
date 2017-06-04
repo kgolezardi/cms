@@ -443,7 +443,7 @@ class SubmissionDetailsHandler(BaseHandler):
             .filter(UserTest.id == user_test_num) \
             .first()
 
-        if user_test is None:
+        if user_test is None or task is None:
             return self.APIOutput(False, 'No usertest')
 
         tr = user_test.get_result(task.active_dataset)
@@ -456,9 +456,9 @@ class SubmissionDetailsHandler(BaseHandler):
 
         result['compiled'] = tr.compilation_text
 
-        result['time'] = tr.compilation_time
+        result['time'] = tr.execution_time
 
-        result['memory'] = tr.compilation_memory
+        result['memory'] = tr.execution_memory
 
         return self.APIOutput(True, json.dumps(result))
 
