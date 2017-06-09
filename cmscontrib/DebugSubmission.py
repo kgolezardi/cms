@@ -73,7 +73,7 @@ def debugSubmission(submission_id, dataset_id, testcase_codename):
         task_type.execute_job(comp_job, file_cacher)
 
         for sandbox_path in comp_job.sandboxes:
-            print("Compilation sandbox created in %s" % sandbox_path)
+            logger.info("Compilation sandbox created in %s" % sandbox_path)
 
         # Check if the compilation is successful
         result = submission.get_result(dataset)
@@ -90,7 +90,7 @@ def debugSubmission(submission_id, dataset_id, testcase_codename):
         task_type.execute_job(eval_job, file_cacher)
 
         for sandbox_path in eval_job.sandboxes:
-            print("Evaluation sandbox created in %s" % sandbox_path)
+            logger.info("Evaluation sandbox created in %s" % sandbox_path)
 
     return True
 
