@@ -163,7 +163,7 @@ class AddTaskHandler(BaseHandler):
             try:
                 digest = self.application.service.file_cacher.put_file_content(
                     body,
-                    "Task manager for %s" % attrs["name"])
+                    "Task manager for %s" % filename)
             except Exception as error:
                 return self.APIOutput(False, "Manager storage failed: %s" % error)
 
@@ -447,18 +447,17 @@ class SubmissionDetailsHandler(BaseHandler):
             return self.APIOutput(False, 'No usertest')
 
         tr = user_test.get_result(task.active_dataset)
-        if tr is None:
-            return self.APIOutput(False, 'No result')
-
         result = dict()
+        if tr is None:
+            result['evalres'] = None    
+        else:
+            result['evalres'] = tr.evaluation_text
 
-        result['evalres'] = tr.evaluation_text
+            result['compiled'] = tr.compilation_text
 
-        result['compiled'] = tr.compilation_text
+            result['time'] = tr.execution_time
 
-        result['time'] = tr.execution_time
-
-        result['memory'] = tr.execution_memory
+            result['memory'] = tr.execution_memory
 
         return self.APIOutput(True, json.dumps(result))
 
