@@ -449,14 +449,12 @@ class SubmissionDetailsHandler(BaseHandler):
         tr = user_test.get_result(task.active_dataset)
         result = dict()
         if tr is None:
-            result['evalres'] = None    
+            result['result'] = False
         else:
+            result['result'] = True
             result['evalres'] = tr.evaluation_text
-
             result['compiled'] = tr.compilation_text
-
             result['time'] = tr.execution_time
-
             result['memory'] = tr.execution_memory
 
         return self.APIOutput(True, json.dumps(result))
