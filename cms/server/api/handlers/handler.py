@@ -32,6 +32,7 @@ import re
 import json
 import base64
 import gevent
+import tempfile
 
 import tornado.web
 
@@ -114,9 +115,10 @@ class AddTaskHandler(BaseHandler):
             if attrs.get("name") is None:
                 self.APIOutput(False, "No task name specified.")
             attrs["title"] = attrs["name"]
+            name = attrs["name"]
 
             # Check if the task already exists
-            task = self.get_task_by_name(attrs["name"])
+            task = self.get_task_by_name(name)
             if task is not None:
                 return self.APIOutput(False, 'A problem with this name already exists')
 
@@ -154,6 +156,25 @@ class AddTaskHandler(BaseHandler):
             return self.APIOutput(False, "Invalid fields: %s" % error)
 
         managers = json.loads(str(self.get_argument("managers")))
+        if 'manager.cpp' in managers:
+            try:
+                body = base64.b64decode(managers['manager.cpp'])
+            except TypeError:
+                return self.APIOutput(False, "Invalid data: Please provide a base64 encoded file")
+
+            tempdir = tempfile.mkdtemp()
+            src_path = os.path.join(tempdir, 'manager.cpp')
+            exec_path = os.path.join(tempdir, 'manager')
+            with open(src_path, 'wb') as src_file:
+                src_file.write(body)
+            os.system('g++ -x c++ -O2 -static -o %s %s' % (exec_path, src_path))
+            digest = self.application.service.file_cacher.put_file_from_path(
+                exec_path,
+                "Manager for task %s" % name)
+            manager = Manager('manager', digest, dataset=dataset)
+            self.sql_session.add(manager)
+            del managers['manager.cpp']
+
         for filename in managers:
             try:
                 body = base64.b64decode(managers[filename])
@@ -163,7 +184,7 @@ class AddTaskHandler(BaseHandler):
             try:
                 digest = self.application.service.file_cacher.put_file_content(
                     body,
-                    "Task manager for %s" % filename)
+                    "Task manager for %s" % name)
             except Exception as error:
                 return self.APIOutput(False, "Manager storage failed: %s" % error)
 
@@ -393,7 +414,11 @@ class GenerateOutputHandler(BaseHandler):
                         filename, make_timestamp(self.timestamp)))
                 file_digests[filename] = digest
 
-            # Adding testcase's digest
+            # Now Adding managers' digests
+            for manager in task.active_dataset.managers.values():
+                file_digests[manager.filename] = manager.digest
+
+            # Finally Adding testcase's digest
             file_digests["input"] = input_digest
 
         # In case of error, the server aborts the submission
@@ -414,10 +439,10 @@ class GenerateOutputHandler(BaseHandler):
             self.sql_session.add(
                 UserTestFile(filename, digest, user_test=user_test))
         for filename in task_type.get_user_managers(task.submission_format):
-            digest = file_digests[filename]
             if submission_lang is not None:
                 extension = get_language(submission_lang).source_extension
                 filename = filename.replace(".%l", extension)
+            digest = file_digests[filename]
             self.sql_session.add(
                 UserTestManager(filename, digest, user_test=user_test))
 
@@ -452,8 +477,8 @@ class SubmissionDetailsHandler(BaseHandler):
             result['result'] = False
         else:
             result['result'] = True
-            result['evalres'] = tr.evaluation_text
-            result['compiled'] = tr.compilation_text
+            result['evalres'] = json.loads(tr.evaluation_text)
+            result['compiled'] = json.loads(tr.compilation_text)
             result['time'] = tr.execution_time
             result['memory'] = tr.execution_memory
 
