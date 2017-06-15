@@ -477,10 +477,41 @@ class SubmissionDetailsHandler(BaseHandler):
             result['result'] = False
         else:
             result['result'] = True
-            result['evalres'] = json.loads(tr.evaluation_text)
-            result['compiled'] = json.loads(tr.compilation_text)
+
+            if tr.evaluation_text is None:
+                result['evalres'] = None
+            else:
+                result['evalres'] = json.loads(tr.evaluation_text)
+
+            if tr.compilation_text is None:
+                result['compiled'] = None
+            else:
+                result['compiled'] = json.loads(tr.compilation_text)
+
             result['time'] = tr.execution_time
             result['memory'] = tr.execution_memory
+
+            digest = tr.output if tr is not None else None
+            self.sql_session.close()
+
+            if digest is None:
+                result['output'] = None
+            else:
+                out_file = self.application.service.file_cacher.get_file(digest)
+                out_res = str()
+
+                ret = True
+                while ret:
+                    data = out_file.read(FileCacher.CHUNK_SIZE)
+                    length = len(data)
+                    out_res += data
+                    if length < FileCacher.CHUNK_SIZE:
+                        out_file.close()
+                        ret = False
+
+                    gevent.sleep(0)
+
+                result['output'] = base64.b64encode(out_res)
 
         return self.APIOutput(True, json.dumps(result))
 
