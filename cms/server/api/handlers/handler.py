@@ -477,21 +477,30 @@ class SubmissionDetailsHandler(BaseHandler):
             result['result'] = False
         else:
             result['result'] = True
+            result['message'] = str()
 
             if tr.evaluation_text is None:
                 result['evalres'] = None
             else:
-                result['evalres'] = json.loads(tr.evaluation_text)
+                result['evalres'] = json.loads(tr.evaluation_text)[0]
+                result['message'] += result['evalres']
 
             if tr.compilation_text is None:
                 result['compiled'] = None
             else:
-                result['compiled'] = json.loads(tr.compilation_text)
+                result['compiled'] = json.loads(tr.compilation_text)[0]
+                result['message'] += '\n' + tr.compilation_stdout + '\n' + tr.compilation_stderr
 
             result['time'] = tr.execution_time
             result['memory'] = tr.execution_memory
 
-            digest = tr.output if tr is not None else None
+            # Remove starting and trailing new lines from message
+            while result['message'] and result['message'][0] == '\n':
+                result['message'] = result['message'][1:]
+            while result['message'] and result['message'][-1] == '\n':
+                result['message'] = result['message'][:-2]
+
+            digest = tr.output
             self.sql_session.close()
 
             if digest is None:
