@@ -53,7 +53,7 @@ def debugSubmission(submission_id, dataset_id, testcase_codename):
             .first()
 
         if submission is None:
-            print("There's no submission with the ID of %d" % submission_id)
+            logger.error("There's no submission with the ID of %d" % submission_id)
             return False
 
         if dataset_id is None:
@@ -78,7 +78,7 @@ def debugSubmission(submission_id, dataset_id, testcase_codename):
         # Check if the compilation is successful
         result = submission.get_result(dataset)
         if result is None or result.compilation_failed():
-            print("Compilatoin Failed")
+            logger.error("Compilatoin Failed")
             return True
 
         # Evaluation
