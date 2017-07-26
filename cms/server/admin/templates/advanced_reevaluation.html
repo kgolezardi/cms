@@ -36,6 +36,18 @@
             function(response) { utils.redirect_if_ok('{{ url(*next_page) }}', response); }
             );
     }
+
+    function selectAll(select)
+    {
+        var checks = document.getElementsByName('invalidate-check');
+        for (var i = 0; i < checks.length; i++)
+              checks[i].checked = select;
+    }
+
+    function changeAllSelection()
+    {
+        document.getElementById('select-all').checked = false;
+    }
 </script>
 
 <h1>
@@ -75,7 +87,7 @@ Priority
             <th>Codename</th>
             <th>Input</th>
             <th>Output</th>
-            <th>Invalidate?</th>
+            <th><input type="checkbox" id="select-all" onchange="selectAll(this.checked)" /></th>
           </tr>
         </thead>
         <tbody>
@@ -89,7 +101,7 @@ Priority
               <a href="javascript:void(0);" onclick="utils.show_file('output_{{ testcase.codename }}','{{ url("file", testcase.output, "output_%s" % testcase.codename) }}')">Show output</a>
             </td>
             <td>
-               <input type="checkbox" name="invalidate-check" data-testcase-codename="{{ testcase.codename }}" />
+               <input type="checkbox" name="invalidate-check" onchange="changeAllSelection()" data-testcase-codename="{{ testcase.codename }}" />
             </td>
           </tr>
           {% end %}
@@ -103,6 +115,6 @@ Priority
 
 <br><br>
 
-<button onclick="send_request()" >Revaluate!</button>
+<button onclick="send_request()" >Reevaluate!</button>
 
 {% end %}
